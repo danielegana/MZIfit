@@ -114,7 +114,7 @@ val_size = labels.shape[0] - train_size
 # labelsnorm=np.column_stack((n0/n0max,n1/n1max,n2/n2max,off0/maxoffset,off1/off1max,off2/off2max,off3/off3max,off4/off4max))
 
 #Lambda array definition
-numpointslambda=100
+numpointslambda=501
 lambdamummin=1.26
 lambdamum0=1.31
 lambdamummax=1.36
@@ -261,7 +261,7 @@ model.eval()
 
 
 #%% Decision Trees
-
+# 3-parameter fit
 features=np.array([TransferFdblist(lambdamum, 1.31, DeltaL,np.concatenate((row,np.array([labelben[3],labelben[4],labelben[5],labelben[6],labelben[7]])))) for row in labels])
 featuresben=np.array([TransferFdblist(lambdamum, 1.31, DeltaL,labelben)])
 X_train, X_test, y_train, y_test = train_test_split(features, labelsnorm, test_size=0.2, random_state=42)
@@ -289,6 +289,148 @@ mae = np.sqrt(mean_squared_error(y_test, y_pred))
 print("MFRE per feature",np.mean(frac_error, axis=0))
 print("MSE DT: ",mse)
 print("MAE DT: ",mae)
+
+#%%
+#plt.plot(lambdamum,np.transpose(featuresben))
+
+#%%
+#plt.plot(lambdamum,np.transpose(features[3000]))
+#%%
+idxtest=40
+testfun=TransferFdblist(lambdamum, 1.31, DeltaL,np.concatenate((y_predtrain[idxtest],np.array([labelben[3],labelben[4],labelben[5],labelben[6],labelben[7]]))))
+plt.plot(lambdamum,np.transpose(testfun))
+plt.plot(lambdamum,np.transpose(X_train[idxtest]),linestyle=':', color='blue')
+
+#%%
+
+#Decision trees, one parameter at a time
+# First-parameter fit
+
+lambdamumleft=lambdamum[int(numpointslambda*0.4)+1:int(numpointslambda*0.5)+1]#lambdamum[0:int(numpointslambda*0.3)]
+lambdamumright=lambdamum[int(numpointslambda*0.5):int(numpointslambda*0.6)]
+lambdamumright=lambdamumright[::-1]
+
+#%%
+targetfunction=[TransferFdblist(lambdamumleft, 1.31, DeltaL,np.concatenate((row,np.array([labelben[3],labelben[4],labelben[5],labelben[6],labelben[7]]))))+TransferFdblist(lambdamumright, 1.31, DeltaL,np.concatenate((row,np.array([labelben[3],labelben[4],labelben[5],labelben[6],labelben[7]])))) for row in labels]
+features=np.array(targetfunction)
+X_train, X_test, y_train, y_test = train_test_split(features, labels[:,0], test_size=0.3, random_state=30)
+#%%
+
+# Train the model
+
+#modelDT1=ensemble.RandomForestRegressor(n_jobs=-1)
+
+modelDT=tree.DecisionTreeRegressor()
+modelDT1.fit(X_train,y_train)
+
+y_pred = modelDT1.predict(X_test)
+y_predtrain = modelDT1.predict(X_train)
+
+#%%
+frac_error=np.divide(y_predtrain,y_train)
+mse = mean_squared_error(y_predtrain,y_train)
+mae = np.sqrt(mean_squared_error(y_predtrain,y_train))
+print("MFRE per feature",np.mean(frac_error, axis=0))
+print("MSE DT: ",mse)
+print("MAE DT: ",mae)
+
+#%%
+frac_error=np.divide(y_pred,y_test)
+mse = mean_squared_error(y_test, y_pred)
+mae = np.sqrt(mean_squared_error(y_test, y_pred))
+print("MFRE per feature",np.mean(frac_error, axis=0))
+print("MSE DT: ",mse)
+print("MAE DT: ",mae)
+#%%
+
+##THERE MUST BE AN ERROR IN THE CODE, I CAN'T BRING THE ERROR DOWN FROM 0.021 EXACTLY
+ypredtotal=modelDT1.predict(features)
+labelspred=np.column_stack((ypredtotal, np.zeros((len(ypredtotal), 2))))
+#%%
+testtransfer=TransferFdblist(lambdamum, 1.31, DeltaL,np.concatenate((labels[130],np.array([labelben[3],labelben[4],labelben[5],labelben[6],labelben[7]]))))
+testtransfer2=TransferFdblist(lambdamum, 1.31, DeltaL,np.concatenate((labelspred[130],np.array([labelben[3],labelben[4],labelben[5],labelben[6],labelben[7]]))))
+
+#%%
+featurestrainn0pred=np.array([TransferFdblist(lambdamumleft, 1.31, DeltaL,np.concatenate((row,np.array([labelben[3],labelben[4],labelben[5],labelben[6],labelben[7]]))))+TransferFdblist(lambdamumright, 1.31, DeltaL,np.concatenate((row,np.array([labelben[3],labelben[4],labelben[5],labelben[6],labelben[7]])))) for row in labelspred])
+differentialfeaturesn0=features-featurestrainn0pred
+
+#%%
+#Second parameter fit
+
+#%%
+lambdamumleft=lambdamum[0:int(numpointslambda*0.5)-1]#lambdamum[0:int(numpointslambda*0.3)]
+lambdamumright=lambdamum[int(numpointslambda*0.5)+1:]
+lambdamumright=lambdamumright[::-1]
+#%%
+targetfunction=[TransferFdblist(lambdamumleft, 1.31, DeltaL,np.concatenate((row,np.array([labelben[3],labelben[4],labelben[5],labelben[6],labelben[7]]))))-TransferFdblist(lambdamumright, 1.31, DeltaL,np.concatenate((row,np.array([labelben[3],labelben[4],labelben[5],labelben[6],labelben[7]])))) for row in labels]
+
+features=np.array(targetfunction)
+X_train, X_test, y_train, y_test = train_test_split(features, labels[:,1], test_size=0.2, random_state=42)
+#%%
+modelDT2=ensemble.RandomForestRegressor(n_jobs=-1,min_samples_leaf=4)
+
+#modelDT=tree.DecisionTreeRegressor(max_depth=1000)
+modelDT2.fit(X_train,y_train)
+
+y_pred = modelDT2.predict(X_test)
+y_predtrain = modelDT2.predict(X_train)
+
+#%%
+frac_error=np.divide(y_predtrain,y_train)
+mse = mean_squared_error(y_predtrain,y_train)
+mae = np.sqrt(mean_squared_error(y_predtrain,y_train))
+print("MFRE per feature",np.mean(frac_error, axis=0))
+print("MSE DT: ",mse)
+print("MAE DT: ",mae)
+
+#%%
+frac_error=np.divide(y_pred,y_test)
+mse = mean_squared_error(y_test, y_pred)
+mae = np.sqrt(mean_squared_error(y_test, y_pred))
+print("MFRE per feature",np.mean(frac_error, axis=0))
+print("MSE DT: ",mse)
+print("MAE DT: ",mae)
+
+
+#%%
+#Third parameter fit
+
+#%%
+lambdamumleft=lambdamum[0:int(numpointslambda*0.5)-1]#lambdamum[0:int(numpointslambda*0.3)]
+lambdamumright=lambdamum[int(numpointslambda*0.5)+1:]
+lambdamumright=lambdamumright[::-1]
+#%%
+zeroedtarget=
+
+targetfunction=[TransferFdblist(lambdamumleft, 1.31, DeltaL,np.concatenate((row,np.array([labelben[3],labelben[4],labelben[5],labelben[6],labelben[7]]))))-TransferFdblist(lambdamumright, 1.31, DeltaL,np.concatenate((row,np.array([labelben[3],labelben[4],labelben[5],labelben[6],labelben[7]])))) for row in labels]
+
+features=np.array(targetfunction)
+X_train, X_test, y_train, y_test = train_test_split(features, labels[:,1], test_size=0.2, random_state=42)
+#%%
+modelDT2=ensemble.RandomForestRegressor(n_jobs=-1,min_samples_leaf=4)
+
+#modelDT=tree.DecisionTreeRegressor(max_depth=1000)
+modelDT2.fit(X_train,y_train)
+
+y_pred = modelDT2.predict(X_test)
+y_predtrain = modelDT2.predict(X_train)
+
+#%%
+frac_error=np.divide(y_predtrain,y_train)
+mse = mean_squared_error(y_predtrain,y_train)
+mae = np.sqrt(mean_squared_error(y_predtrain,y_train))
+print("MFRE per feature",np.mean(frac_error, axis=0))
+print("MSE DT: ",mse)
+print("MAE DT: ",mae)
+
+#%%
+frac_error=np.divide(y_pred,y_test)
+mse = mean_squared_error(y_test, y_pred)
+mae = np.sqrt(mean_squared_error(y_test, y_pred))
+print("MFRE per feature",np.mean(frac_error, axis=0))
+print("MSE DT: ",mse)
+print("MAE DT: ",mae)
+
 
 #%%
 #plt.plot(lambdamum,np.transpose(featuresben))
