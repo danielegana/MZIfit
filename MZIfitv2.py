@@ -1,3 +1,6 @@
+
+## PLAY AROUND WITH THE SCALING. IF THAT DOESN'T WORK, DO 1 PARAMETER REGRESSION AT A TIME, AS N1 IS WORKING GREAT. CHECK THAT N1 WORKS FOR THE BENCHMARK LABELS.
+
 #%%
 import torch
 import numpy as np
@@ -57,7 +60,7 @@ print("Defining parameters")
 
 bwdtnm=50
 bwdtmum=bwdtnm*1.0e-3
-lendata=20000
+lendata=10000
 
 
 
@@ -114,161 +117,54 @@ val_size = labels.shape[0] - train_size
 # labelsnorm=np.column_stack((n0/n0max,n1/n1max,n2/n2max,off0/maxoffset,off1/off1max,off2/off2max,off3/off3max,off4/off4max))
 
 #Lambda array definition
-numpointslambda=501
+numpointslambda=31
 lambdamummin=1.26
 lambdamum0=1.31
 lambdamummax=1.36
 lambdamum=np.linspace(lambdamummin,lambdamummax,numpointslambda)
+
+numpointsL=31
+Lmin=50
+Lmax=200
 #normalized_grid = (lambdamum - lambdamum0) / (lambdamummax - lambdamum0)
 #transformed_grid = np.array([np.sqrt(x) if x>0 else -np.sqrt(-x) for x in normalized_grid])
 #lambdamum = lambdamu0 + (lambdamummax - lambdamum0) * transformed_grid
 
 #%%
-DeltaL=151.47
+DeltaLmum=np.linspace(Lmin,Lmax,numpointsL)
+
+DeltaLoverlambda=np.linspace(np.min(np.outer(DeltaLmum,1/lambdamum)),np.max(np.outer(DeltaLmum,1/lambdamum)),numpointsL)
+
+lambda0mum=1.31
+dlambdamum=lambdamum-lambda0mum
+
 
 #%% Define Transfer Function
 
-def TransferFdblist(lambdamum,lambda0mum,DeltaLmum,labelarray):
-    dlambdamum=lambdamum-lambda0mum
-    dlambdanm=dlambdamum*1.0e3
+def TransferFdblist(dlambdamum,DeltaLoverlambda,labelarray):
+   # dlambdamum=lambdamum-lambda0mum
+   # dlambdanm=dlambdamum*1.0e3
     neff=labelarray[0]+labelarray[1]*dlambdamum+labelarray[2]*dlambdamum**2
     #offset=labelarray[3]+labelarray[4]*dlambdanm+labelarray[5]*dlambdanm**2+labelarray[6]*dlambdanm**3+labelarray[7]*dlambdanm**4
-    beta=neff*2*np.pi/(lambdamum)
+    betatimeslambda=neff*2*np.pi
     #TFdB=10*np.log10(0.5*(1+np.cos(beta*DeltaLmum)))+2*offset
-    TFdB=10*np.log10(0.5*(1+np.cos(beta*DeltaLmum)))
+    TFdB=10*np.log10(1e-30+0.5*(1+np.cos(np.outer(betatimeslambda,DeltaLoverlambda))))
     return TFdB
-
-#%% getDataset class. label and feature dimensions are set here and in mynet
-class getDataset(Dataset):
-    def __init__(self, labels, feature_functions,lambdaarray,DeltaLmum,lambda0mum):
-        self.labels = labels
-        self.feature_functions=feature_functions
-        self.lambdaarray=lambdaarray
-        self.DeltaLmum=DeltaLmum
-        self.lambda0mum=lambda0mum
-
-    def __len__(self):
-        # Number of instances in the dataset
-        return len(self.labels)
-
-    def __getitem__(self, idx):
-        # Select the label row at the given index
-        labels = self.labels[idx]
-
-        # Apply each feature function to the labels
-        features = self.feature_functions(self.lambdaarray,self.lambda0mum,self.DeltaLmum,labels)
-
-        # Concatenate the features if necessary
-
-        # Return a tuple of (label, features)
-        labelsnorm=np.column_stack((labels[0]/n0max,labels1]/n1max,labels[2]/n2max))
-        labels=torch.tensor(labels, dtype=torch.float64).to(device)
-
-        features=torch.tensor(features, dtype=torch.float64).to(device)
-        return features,labelsnorm
-
-
-#%% Define Neural Network
-
-class mynet(nn.Module):    
-    def __init__(self,featuredimensions,labeldimensions):
-        super(mynet, self).__init__()
-        self.model = nn.Sequential(
-            nn.Linear(featuredimensions, 64),       
-            nn.BatchNorm1d(64),        
-            nn.ReLU(),                 
-            nn.Linear(64, 32),         # Hidden layer
-            nn.BatchNorm1d(32),        
-            nn.ReLU(),                
-            nn.Linear(32, labeldimensions)           # Output layer
-        )
-    
-    def forward(self, x):
-        return self.model(x)
-    
-
-#Defines the function to train the model
-def train(dataloader, model, loss_fn, optimizer):
-    size = len(dataloader.dataset)
-    model.train()
-    for batch, (X, y) in enumerate(dataloader):
-        X, y = X.to(device), y.to(device)
-        pred = model(X)
-        loss = loss_fn(pred, y)
-
-        loss.backward()
-        optimizer.step()
-        #optimizer.zero_grad() zeroes out the gradient after one pass. this is to 
-        #avoid accumulating gradients, which is the standard behavior
-        optimizer.zero_grad()
-
-        # Print loss every 100 batches
-        if batch % 100 == 0:
-            loss, current = loss.item(), batch*batch_size
-            print(f"loss: {loss:>7f}  [{current:>5d}]")
-
-# %%
-def test(dataloader, model, loss_fn):
-    size = len(dataloader.dataset)
-    num_batches = len(dataloader)
-    model.eval()
-    test_loss, correct = 0, 0
-    with torch.no_grad():
-        for X, y in dataloader:
-            X, y = X.to(device), y.to(device)
-            pred = model(X)
-            test_loss += loss_fn(pred, y).item()
-    test_loss /= num_batches
-    print("Avg loss: ",test_loss)
-
-#%% Neural network
-#getDataset(labels, feature_functions,lambdaarray,DeltaLmum,lambda0mum)
-#labelsforNN=[np.concatenate((row,np.array([labelben[3],labelben[4],labelben[5],labelben[6],labelben[7]]))) for row in labels]
-#labelsforNN=np.array(labelsforNN)
-#%%
-MZIdata=getDataset(labels,TransferFdblist,lambdamum,DeltaL,lambdamum0)
-train_dataset = Subset(MZIdata, range(0,train_size))
-test_dataset = Subset(MZIdata, range(train_size,len(MZIdata)))
-
-#%%featuredimensions,labeldimensions
-model = mynet(featuredimensions=numpointslambda,labeldimensions=3).to(device)
-batch_size=100
-epochs=5
-learningrate=1e-3
-train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False)
-test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
-loss_fn = nn.MSELoss()
-optimizer = torch.optim.Adam(model.parameters(), learningrate)    
-#%%
-learningrate=1e-4
-
-#%%
-
-for t in range(epochs):
-    print(f"Epoch {t+1}\n-------------------------------")
-    train(train_loader, model, loss_fn, optimizer)    
-    print("Done!")
-#%%
-test(test_loader, model, loss_fn)
-#features=np.array([TransferFdblist(numpointslambda, 1.31, DeltaL,row) for row in labels])
-#featuresben=np.array([TransferFdblist(numpointslambda, 1.31, DeltaL,labelben)])
-#%%
-features=np.array([TransferFdblist(lambdamum, 1.31, DeltaL,np.concatenate((row,np.array([labelben[3],labelben[4],labelben[5],labelben[6],labelben[7]])))) for row in labels])
-featuresben=np.array([TransferFdblist(lambdamum, 1.31, DeltaL,labelben)])
-#%%
-model.eval()
 
 
 
 #%% Decision Trees
 # 3-parameter fit
-features=np.array([TransferFdblist(lambdamum, 1.31, DeltaL,np.concatenate((row,np.array([labelben[3],labelben[4],labelben[5],labelben[6],labelben[7]])))) for row in labels])
-featuresben=np.array([TransferFdblist(lambdamum, 1.31, DeltaL,labelben)])
-X_train, X_test, y_train, y_test = train_test_split(features, labelsnorm, test_size=0.2, random_state=42)
+#features=np.array([TransferFdblist(lambdamum, 1.31, DeltaLmum,row).flatten() for row in labels])
+cscaling=np.random.uniform(0.9,1.1,5)
+augmentedfeatures=np.array([TransferFdblist(np.outer(lambdamum,cscaling).flatten(), 1.31, np.outer(DeltaLmum,cscaling).flatten(),row).flatten() for row in labels])
+featuresben=np.array([TransferFdblist(lambdamum, 1.31, DeltaLmum,labelben)])
 #%%
-modelDT=ensemble.RandomForestRegressor(n_jobs=-1,min_samples_leaf=2,max_depth=30,n_estimators=100)
+X_train, X_test, y_train, y_test = train_test_split(augmentedfeatures, labels, test_size=0.2, random_state=42)
+#%%
+#modelDT=ensemble.RandomForestRegressor(n_jobs=-1,min_samples_leaf=2,max_depth=30,n_estimators=100)
 
-#modelDT=tree.DecisionTreeRegressor(max_depth=1000)
+modelDT=tree.DecisionTreeRegressor()
 modelDT.fit(X_train,y_train)
 
 y_pred = modelDT.predict(X_test)
@@ -303,6 +199,7 @@ plt.plot(lambdamum,np.transpose(X_train[idxtest]),linestyle=':', color='blue')
 
 #%%
 
+#########################################
 #Decision trees, one parameter at a time
 # First-parameter fit
 
@@ -311,16 +208,18 @@ lambdamumright=lambdamum[int(numpointslambda*0.5):int(numpointslambda*0.6)]
 lambdamumright=lambdamumright[::-1]
 
 #%%
-targetfunction=[TransferFdblist(lambdamumleft, 1.31, DeltaL,np.concatenate((row,np.array([labelben[3],labelben[4],labelben[5],labelben[6],labelben[7]]))))+TransferFdblist(lambdamumright, 1.31, DeltaL,np.concatenate((row,np.array([labelben[3],labelben[4],labelben[5],labelben[6],labelben[7]])))) for row in labels]
-features=np.array(targetfunction)
+targetfunction=[TransferFdblist(dlambdamum, DeltaLoverlambda,row).flatten() for row in labels]
+#cscaling=np.linspace(0.9,1.1,10)
+#augmentedfeatures=np.array([TransferFdblist(np.outer(lambdamum,cscaling).flatten(), 1.31, np.outer(DeltaLmum,cscaling).flatten(),row).flatten() for row in labels])
+features=np.array(targetfunction)  
 X_train, X_test, y_train, y_test = train_test_split(features, labels[:,0], test_size=0.3, random_state=30)
 #%%
 
 # Train the model
 
-#modelDT1=ensemble.RandomForestRegressor(n_jobs=-1)
+modelDT1=ensemble.RandomForestRegressor(n_jobs=-1)
 
-modelDT=tree.DecisionTreeRegressor()
+#modelDT1=tree.DecisionTreeRegressor()
 modelDT1.fit(X_train,y_train)
 
 y_pred = modelDT1.predict(X_test)
@@ -334,7 +233,7 @@ print("MFRE per feature",np.mean(frac_error, axis=0))
 print("MSE DT: ",mse)
 print("MAE DT: ",mae)
 
-#%%
+ #%%
 frac_error=np.divide(y_pred,y_test)
 mse = mean_squared_error(y_test, y_pred)
 mae = np.sqrt(mean_squared_error(y_test, y_pred))
