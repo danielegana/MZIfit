@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader
 from torch.utils.data import ConcatDataset
 from torch.utils.data import Subset
 from torch.utils.data import Dataset,random_split
-from numpy import random
+from numpy iPmport random
 import torch.nn.functional as F
 from sklearn import tree
 from sklearn import ensemble
